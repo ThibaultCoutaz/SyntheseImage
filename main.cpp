@@ -86,7 +86,7 @@ glm::vec3 normal(Sphere s,glm::vec3 p){
     return glm::normalize(p-s.center);
 }
 
-glm::vec3 normal(Triangle t,glm::vec3 p){
+ glm::vec3 normal(Triangle t,glm::vec3 p){
     return glm::normalize(glm::cross((t.v1-t.v0),(t.v2-t.v1)));
 }
 
@@ -182,23 +182,23 @@ namespace scene
 
     // Left Wall
     const Triangle leftWallA{{0, 0, 0}, {0, 100, 0}, {0, 0, 150}};
-    const Triangle leftWallB{{0, 100, 150}, {0, 100, 0}, {0, 0, 150}};
+    const Triangle leftWallB{{0, 100, 0},{0, 100, 150},  {0, 0, 150}};
 
     // Right Wall
-    const Triangle rightWallA{{100, 0, 0}, {100, 100, 0}, {100, 0, 150}};
+    const Triangle rightWallA{{100, 100, 0},{100, 0, 0},  {100, 0, 150}};
     const Triangle rightWallB{{100, 100, 150}, {100, 100, 0}, {100, 0, 150}};
 
     // Back wall
     const Triangle backWallA{{0, 0, 0}, {100, 0, 0}, {100, 100, 0}};
-    const Triangle backWallB{{0, 0, 0}, {0, 100, 0}, {100, 100, 0}};
+    const Triangle backWallB{{0, 100, 0},{0, 0, 0},  {100, 100, 0}};
 
     // Bottom Floor
-    const Triangle bottomWallA{{0, 0, 0}, {100, 0, 0}, {100, 0, 150}};
+    const Triangle bottomWallA{{100, 0, 0},{0, 0, 0},  {100, 0, 150}};
     const Triangle bottomWallB{{0, 0, 0}, {0, 0, 150}, {100, 0, 150}};
 
     // Top Ceiling
     const Triangle topWallA{{0, 100, 0}, {100, 100, 0}, {0, 100, 150}};
-    const Triangle topWallB{{100, 100, 150}, {100, 100, 0}, {0, 100, 150}};
+    const Triangle topWallB{ {100, 100, 0},{100, 100, 150}, {0, 100, 150}};
 
     const Sphere leftSphere{16.5, glm::vec3 {27, 16.5, 47}};
     const Sphere rightSphere{16.5, glm::vec3 {73, 16.5, 78}};
@@ -358,10 +358,11 @@ glm::vec3 sample_sphere(const float r, const float u, const float v, float &pdf,
     return sample_p * r;
 }
 
-glm::vec3 radiance (const Ray & r )
+glm::vec3 radiance (const Ray & r , int recurance )
 {
 
     float t=1.0,eps=0.1;
+    glm::vec3 indirect(0.);
 
     Object *obj= intersect(r,t);
     if(obj){
@@ -369,48 +370,72 @@ glm::vec3 radiance (const Ray & r )
 
         glm::vec3 intersection(r.origin+glm::normalize(r.direction)* t);
 
+        if(recurance < 5){
             //To know if it's a mirror or not.
-            if(obj->albedo()==scene::mirror.color ){
+            if(obj->albedo()==scene::mirror.color){
                 glm::vec3 intercamera(r.origin-intersection);
                 glm::vec3 reflection = glm::normalize(reflect(glm::normalize(intercamera),obj->normal(intersection)));
-                glm::vec3 color = radiance(Ray{intersection+(eps*reflection),reflection});
+                glm::vec3 color = radiance(Ray{intersection+(eps*reflection),reflection},recurance+1);
                 return color;
+
+            //to know if its a glass
+            }else if(obj->albedo() == scene::glass.color){
+
+                float ior=1.33;
+                glm::vec3 wo = glm::vec3(0.,0.,0.);
+                glm::vec3 intercamera(r.origin-intersection);
+                if( refract(glm::normalize(intercamera),obj->normal(intersection),ior,wo)){
+                    glm::vec3 color = radiance(Ray{intersection+(eps*glm::normalize(wo)),glm::normalize(wo)},recurance+1);
+                    return color;
+                }else{
+                    return glm::vec3(0.);
+                }
+
+            //The other object.
             }else{
 
-                glm::vec3 origin= scene::light;
-                glm::vec3 direction = glm::normalize(intersection-origin);
-                Ray lightvec = Ray{origin,direction};
-
-
-                if(intersect(lightvec,t)){
-                    glm::vec3 intersectionlight(lightvec.origin+lightvec.direction*t);
-                    ///*Distance light et premier intersection
-                    float distance1=glm::distance(lightvec.origin,intersectionlight);
-                    //Distance light point dintersection du premeir ray
-                    float distance2=glm::distance(lightvec.origin,intersection);
-                    if(distance1+eps<distance2){
-
-                        return glm::vec3(0.f);
-
-
-                    }else{
-
-                        glm::vec3 L = glm::normalize(scene::light-intersection); // => L
-                        glm::vec3 N = obj->normal(intersection); //N
-                        float diff = glm::dot(L,N);
-                        diff=glm::abs(diff)/pi;
-
-
-
-                        return obj->albedo()*diff;
-                    }
-                }
+                float u = random_u();
+                float v = random_u();
+                glm::vec3 w = sample_cos(u,v,obj->normal(intersection));
+                indirect = radiance(Ray{intersection+(eps*glm::normalize(w)),glm::normalize(w)},recurance+1)*obj->albedo();
             }
+       }
 
 
-    }
-    return glm::vec3(0.0f);
+            glm::vec3 origin= scene::light;
+            glm::vec3 direction = glm::normalize(intersection-origin);
+            Ray lightvec = Ray{origin,direction};
 
+
+            if(intersect(lightvec,t)){
+
+                glm::vec3 intersectionlight(lightvec.origin+lightvec.direction*t);
+                ///*Distance light et premier intersection
+                float distance1=glm::distance(lightvec.origin,intersectionlight);
+                //Distance light point dintersection du premeir ray
+                float distance2=glm::distance(lightvec.origin,intersection);
+
+                if(distance1+eps<distance2){
+
+                    return indirect;
+
+                }else{
+
+                    glm::vec3 L = glm::normalize(scene::light-intersection); // => L
+                    glm::vec3 N = obj->normal(intersection); //N
+                    float diff = glm::dot(L,N);
+                    diff=glm::abs(diff)/pi;
+
+
+
+                    return indirect + obj->albedo()*diff;
+               }
+           }
+
+
+
+}
+    return glm::vec3(0.0f);        
 }
 
 int main (int, char **)
@@ -431,22 +456,33 @@ int main (int, char **)
 
     glm::mat4 screenToRay = glm::inverse(camera);
 
+    unsigned nbray = 100;
+#pragma omp parallel for
     for (int y = 0; y < h; y++)
     {
         std::cerr << "\rRendering: " << 100 * y / (h - 1) << "%";
 
         for (unsigned short x = 0; x < w; x++)
         {
-            glm::vec4 p0 = screenToRay * glm::vec4{float(x), float(h - y), 0.f, 1.f};
-            glm::vec4 p1 = screenToRay * glm::vec4{float(x), float(h - y), 1.f, 1.f};
 
-            glm::vec3 pp0 = glm::vec3(p0 / p0.w);
-            glm::vec3 pp1 = glm::vec3(p1 / p1.w);
+            for(unsigned k=0; k< nbray ; k++){
 
-            glm::vec3 d = glm::normalize(pp1 - pp0);
+                /*float u = random_u();
+                float v = random_u();
+                float x= sqrt(-2*log(u))*cos(2*pi*v)*0.7;
+                */// a faire ici
+                glm::vec4 p0 = screenToRay * glm::vec4{float(x), float(h - y), 0.f, 1.f};
+                glm::vec4 p1 = screenToRay * glm::vec4{float(x), float(h - y), 1.f, 1.f};
 
-            glm::vec3 r = radiance (Ray{pp0, d});
-            colors[y * w + x] += glm::clamp(r, glm::vec3(0.f, 0.f, 0.f), glm::vec3(1.f, 1.f, 1.f)) * 0.25f;
+                glm::vec3 pp0 = glm::vec3(p0 / p0.w);
+                glm::vec3 pp1 = glm::vec3(p1 / p1.w);
+
+                glm::vec3 d = glm::normalize(pp1 - pp0);
+
+                glm::vec3 r = radiance (Ray{pp0, d},0);
+                colors[y * w + x] += glm::clamp(r, glm::vec3(0.f, 0.f, 0.f), glm::vec3(1.f, 1.f, 1.f)); // a changer
+            }
+            colors[y * w + x]/=nbray;
         }
     }
 
