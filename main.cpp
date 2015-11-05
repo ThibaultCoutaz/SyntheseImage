@@ -370,6 +370,9 @@ glm::vec3 radiance (const Ray & r , int recurance )
 
         glm::vec3 intersection(r.origin+glm::normalize(r.direction)* t);
 
+        float u = random_u();
+        float v = random_u();
+
         if(recurance < 5){
             //To know if it's a mirror or not.
             if(obj->albedo()==scene::mirror.color){
@@ -394,16 +397,15 @@ glm::vec3 radiance (const Ray & r , int recurance )
             //The other object.
             }else{
 
-                float u = random_u();
-                float v = random_u();
                 glm::vec3 w = sample_cos(u,v,obj->normal(intersection));
                 indirect = radiance(Ray{intersection+(eps*glm::normalize(w)),glm::normalize(w)},recurance+1)*obj->albedo();
             }
        }
 
 
+            float pdf=1.0;
             glm::vec3 origin= scene::light;
-            glm::vec3 direction = glm::normalize(intersection-origin);
+            glm::vec3 direction = sample_sphere(10., u, v,pdf, glm::vec3(0.,1.,0.));
             Ray lightvec = Ray{origin,direction};
 
 
@@ -424,7 +426,7 @@ glm::vec3 radiance (const Ray & r , int recurance )
                     glm::vec3 L = glm::normalize(scene::light-intersection); // => L
                     glm::vec3 N = obj->normal(intersection); //N
                     float diff = glm::dot(L,N);
-                    diff=glm::abs(diff)/pi;
+                    diff=diff*10./pi; //J'ai enlevé abs(diff) //*10 pour plus de lumiére
 
 
 
@@ -456,7 +458,7 @@ int main (int, char **)
 
     glm::mat4 screenToRay = glm::inverse(camera);
 
-    unsigned nbray = 100;
+    unsigned nbray = 50;
 #pragma omp parallel for
     for (int y = 0; y < h; y++)
     {
@@ -467,12 +469,13 @@ int main (int, char **)
 
             for(unsigned k=0; k< nbray ; k++){
 
-                /*float u = random_u();
+                float u = random_u();
                 float v = random_u();
-                float x= sqrt(-2*log(u))*cos(2*pi*v)*0.7;
-                */// a faire ici
-                glm::vec4 p0 = screenToRay * glm::vec4{float(x), float(h - y), 0.f, 1.f};
-                glm::vec4 p1 = screenToRay * glm::vec4{float(x), float(h - y), 1.f, 1.f};
+                float dx= sqrt(-2*log(u))*cos(2*pi*v)*0.2;
+                float dy= sqrt(-2*log(u))*sin(2*pi*v)*0.2;
+
+                glm::vec4 p0 = screenToRay * glm::vec4{float(x+dx), float(h - (y+dy)), 0.f, 1.f};
+                glm::vec4 p1 = screenToRay * glm::vec4{float(x+dx), float(h - (y+dy)), 1.f, 1.f};
 
                 glm::vec3 pp0 = glm::vec3(p0 / p0.w);
                 glm::vec3 pp1 = glm::vec3(p1 / p1.w);
@@ -480,9 +483,10 @@ int main (int, char **)
                 glm::vec3 d = glm::normalize(pp1 - pp0);
 
                 glm::vec3 r = radiance (Ray{pp0, d},0);
-                colors[y * w + x] += glm::clamp(r, glm::vec3(0.f, 0.f, 0.f), glm::vec3(1.f, 1.f, 1.f)); // a changer
+                colors[y * w + x] += r; // a changer
             }
             colors[y * w + x]/=nbray;
+            colors[y * w + x]=glm::clamp( colors[y * w + x],glm::vec3(0.f),glm::vec3(1.f));
         }
     }
 
