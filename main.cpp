@@ -384,14 +384,25 @@ glm::vec3 radiance (const Ray & r , int recurance )
             //to know if its a glass
             }else if(obj->albedo() == scene::glass.color){
 
-                float ior=1.33;
-                glm::vec3 wo = glm::vec3(0.,0.,0.);
                 glm::vec3 intercamera(r.origin-intersection);
-                if( refract(glm::normalize(intercamera),obj->normal(intersection),ior,wo)){
+                float ior=1.33;
+                float fre = fresnelR(glm::normalize(intercamera),obj->normal(intersection),ior);
+                glm::vec3 wo = glm::vec3(0.,0.,0.);
+
+                if(random_u()>fre){
+
+                    if( refract(glm::normalize(intercamera),obj->normal(intersection),ior,wo)){
+                        glm::vec3 color = radiance(Ray{intersection+(eps*glm::normalize(wo)),glm::normalize(wo)},recurance+1);
+                        return color;
+                    }else{
+                        return glm::vec3(0.);
+                    }
+                }else{
+
+                    wo = reflect(glm::normalize(intercamera),obj->normal(intersection));
                     glm::vec3 color = radiance(Ray{intersection+(eps*glm::normalize(wo)),glm::normalize(wo)},recurance+1);
                     return color;
-                }else{
-                    return glm::vec3(0.);
+
                 }
 
             //The other object.
@@ -458,7 +469,7 @@ int main (int, char **)
 
     glm::mat4 screenToRay = glm::inverse(camera);
 
-    unsigned nbray = 50;
+    unsigned nbray = 500;
 #pragma omp parallel for
     for (int y = 0; y < h; y++)
     {
