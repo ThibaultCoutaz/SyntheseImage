@@ -6,6 +6,7 @@
 #include <random>
 #include <memory>
 #include <fstream>
+#include <string>
 #include <iostream>
 
 // GLM (vector / matrix)
@@ -18,6 +19,10 @@
 
 const float pi = 3.1415927f;
 const float noIntersect = std::numeric_limits<float>::infinity();
+
+
+
+
 
 bool isIntersect(float t)
 {
@@ -40,7 +45,95 @@ struct Triangle
     const glm::vec3 v0, v1, v2;
 };
 
-    // WARRING: works only if r.d is normalized
+struct Quadra
+{
+    const glm::vec3 v0, v1, v2, v3;
+};
+
+struct Mesh
+{
+    const std::vector<glm::vec3> Sommets;
+    const std::vector<Triangle> Faces;
+    const std::vector<glm::vec3> Normals;
+};
+
+
+//Calcule normal d'un Triangle
+glm::vec3 TriangleNormal(Triangle q){
+        glm::vec3 v12(q.v1.x-q.v0.x,q.v1.y-q.v0.y,q.v1.z-q.v0.z);
+        glm::vec3 v13(q.v2.x-q.v0.x,q.v2.y-q.v0.y,q.v2.z-q.v0.z);
+
+        glm::vec3 normal(0.,0.,0.);
+        normal.x = v12.y*v13.z - v12.z*v13.y;
+        normal.y = v12.z*v13.x - v12.x*v13.z;
+        normal.z = v12.x*v13.y - v12.y*v13.x;
+
+        return glm::normalize(normal);
+}
+
+
+//Calcule Normal d'un Quadra
+/*glm::vec3 QuadraNormal(Quadra q){
+    glm::vec3 n1 = TriangleNormal(q.v0,q.v1,q.v2);
+    glm::vec3 n2 = TriangleNormal(q.v2,q.v3,q.v0);
+
+    return (n1+n2)/2.f;
+}*/
+
+std::vector<glm::vec3> Sommets;
+std::vector<Triangle> Faces;
+std::vector<glm::vec3> Normals;
+
+
+//****Open a file and save the data****//
+void ManageFile(std::string File){
+
+   std::ifstream fichier(File.c_str(),std::ios::in);
+
+   std::string test;
+
+   if(fichier){
+       std::cout<<"Ouverture du fichier (lecture) : "<<File.c_str()<<std::endl;
+
+       while (true){
+           fichier>>test;
+           if(test == "v"){
+               glm::vec3 som(0.);
+                fichier>>som.x>>som.y>>som.z;
+                som += glm::vec3(50,16.5,50);
+                if(fichier.good()){
+                    Sommets.push_back(som);
+                    //std::cout<<"Test : "<<Sommets.back().y<<std::endl;
+                }
+           }
+           if(test == "f"){
+                int face[4];
+                fichier>>face[0]>>face[1]>>face[2]>>face[3];
+                if(fichier.good()){
+                    //Sommets.push_back(som);
+                    Triangle q = Triangle{Sommets[face[0]-1],Sommets[face[1]-1],Sommets[face[2]-1]};
+                    Triangle q2 = Triangle{Sommets[face[2]-1],Sommets[face[3]-1],Sommets[face[0]-1]};
+                    Faces.push_back(q);
+                    Faces.push_back(q2);
+                    Normals.push_back(TriangleNormal(q));
+                    Normals.push_back(TriangleNormal(q2));
+                    //std::cout<<"Test : "<<Faces.back().v1.x<<std::endl;
+                }else{
+                    break;
+                }
+           }
+       }
+
+       std::cout<<" Fermeture du fichier (lecture) : "<<File.c_str()<<std::endl;
+       fichier.close();
+
+   }else{
+       std::cout<<"Erreur d'ouverture du fichier (lecture) : "<<File.c_str()<<std::endl;
+   }
+}
+
+
+// WARRING: works only if r.d is normalized
 float intersect (const Ray & ray, const Sphere &sphere)
 {				// returns distance, 0 if nohit
     glm::vec3 op = sphere.center - ray.origin;		// Solve t^2*d.d + 2*t*(o-p).d + (o-p).(o-p)-R^2 = 0
@@ -81,6 +174,27 @@ float intersect(const Ray & ray, const Triangle &triangle)
     return t;
 }
 
+
+float intersect(const Ray & ray, const Mesh &mesh){
+
+    for(int i = 0 ; i < mesh.Faces.size();i++){
+
+       intersect(ray,mesh.Faces[i]);
+
+    }
+
+}
+
+//Check if a point in in the Triangle
+bool IsIn(Triangle t,glm::vec3 _p){
+    /**************************/
+    //Calcule
+    //(xa-xm)(yb-ym)-(ya-ym)(xb-xm)
+    //(xb-xm)(yc-ym)-(yb-ym)(xc-xm)
+    //(xc-xm)(ya-ym)-(yc-ym)(xa-xm)
+}
+
+
 /*Normal function*/
 glm::vec3 normal(Sphere s,glm::vec3 p){
     return glm::normalize(p-s.center);
@@ -88,6 +202,19 @@ glm::vec3 normal(Sphere s,glm::vec3 p){
 
  glm::vec3 normal(Triangle t,glm::vec3 p){
     return glm::normalize(glm::cross((t.v1-t.v0),(t.v2-t.v1)));
+}
+
+ glm::vec3 normal(Mesh m,glm::vec3 p){
+
+     for(int i=0;i<m.Faces.size();i++){
+
+         if(IsIn(m.Faces[i],p)){
+             return m.Normals[i];
+         }else{
+             return glm::vec3(0.,0.,0.);
+         }
+
+     }
 }
 
 
@@ -175,6 +302,13 @@ std::unique_ptr<Object> makeObject(const P&p, const M&m)
     return std::unique_ptr<Object>(new ObjectTpl<P, M>{p, m});
 }
 
+
+ std::vector<std::unique_ptr<Object>> DrawObj( std::vector<std::unique_ptr<Object>> _ret){
+
+    return _ret;
+ }
+
+
 // Scene
 namespace scene
 {
@@ -199,6 +333,9 @@ namespace scene
     // Top Ceiling
     const Triangle topWallA{{0, 100, 0}, {100, 100, 0}, {0, 100, 150}};
     const Triangle topWallB{ {100, 100, 0},{100, 100, 150}, {0, 100, 150}};
+
+    //Mesh
+    const Mesh m{Sommets,Faces,Normals};
 
     const Sphere leftSphere{16.5, glm::vec3 {27, 16.5, 47}};
     const Sphere rightSphere{16.5, glm::vec3 {73, 16.5, 78}};
@@ -227,7 +364,7 @@ namespace scene
         ret.push_back(makeObject(rightWallB, blue));
         ret.push_back(makeObject(leftWallA, red));
         ret.push_back(makeObject(leftWallB, red));
-
+        ret.push_back(makeObject(m,red));
         ret.push_back(makeObject(leftSphere, mirror));
         ret.push_back(makeObject(rightSphere, glass));
 
@@ -469,7 +606,12 @@ int main (int, char **)
 
     glm::mat4 screenToRay = glm::inverse(camera);
 
-    unsigned nbray = 500;
+    //Utilisation file
+    ManageFile("Cube.obj");
+
+
+
+    unsigned nbray = 10;
 #pragma omp parallel for
     for (int y = 0; y < h; y++)
     {
